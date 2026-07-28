@@ -97,6 +97,41 @@ def main(argv: Any = None) -> int:
     )
     p_check.add_argument("--json", action="store_true", help="emit machine-readable output")
 
+    p_explain = sub.add_parser(
+        "explain",
+        help="show the refutation arithmetic in prose (which atoms, which weights, what cancels)",
+    )
+    p_explain.add_argument("--spec", required=True, type=Path)
+    p_explain.add_argument("--cert", required=True, type=Path)
+
+    p_init = sub.add_parser(
+        "init",
+        help="scaffold a spec from written relations, e.g. '19 + payload <= record_len'",
+    )
+    p_init.add_argument(
+        "--domain",
+        action="append",
+        default=[],
+        metavar="RELATION",
+        help="a bound on the attacker's inputs, e.g. '0 <= payload'. Repeatable.",
+    )
+    p_init.add_argument(
+        "--guard",
+        action="append",
+        default=[],
+        metavar="RELATION",
+        help="the check your code performs, e.g. '19 + payload <= record_len'. Repeatable.",
+    )
+    p_init.add_argument(
+        "--safety",
+        action="append",
+        default=[],
+        metavar="RELATION",
+        help="the property that must hold, e.g. '3 + payload <= record_len'. Repeatable.",
+    )
+    p_init.add_argument("--name", default="unnamed")
+    p_init.add_argument("-o", "--out", type=Path, help="write here instead of stdout")
+
     p_sos = sub.add_parser("sos", help="check a sum-of-squares certificate")
     p_sos.add_argument("--cert", required=True, type=Path)
 
@@ -138,6 +173,48 @@ def main(argv: Any = None) -> int:
         if report.verdict == UNVERIFIED:
             return 3
         return 0 if report.ok else 1
+
+    if args.command == "explain":
+        try:
+            spec = _load(args.spec)
+            cert = _load(args.cert)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        from .explain import explain_certificate
+
+        print(explain_certificate(spec, cert))
+        # Explaining is not deciding. Exit status still reflects the verdict, so
+        # this can be dropped into a script without changing its meaning.
+        report = check_certificate(spec, cert)
+        if report.verdict == UNVERIFIED:
+            return 3
+        return 0 if report.ok else 1
+
+    if args.command == "init":
+        from .scaffold import RelationSyntaxError, build_spec
+
+        try:
+            spec = build_spec(args.domain, args.guard, args.safety, name=args.name)
+        except RelationSyntaxError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        text = json.dumps(spec, indent=2)
+        if args.out:
+            try:
+                args.out.write_text(text + "\n", encoding="utf-8")
+            except OSError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+            n = len(spec["safety"])
+            print(f"wrote {args.out}")
+            print(
+                f"Next: find multipliers that refute each of the {n} obligation(s), then\n"
+                f"  certkit check --spec {args.out} --cert your.cert.json"
+            )
+        else:
+            print(text)
+        return 0
 
     if args.command == "sos":
         try:

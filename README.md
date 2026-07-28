@@ -49,6 +49,71 @@ To check your own files:
 certkit check --spec my.spec.json --cert my.cert.json
 ```
 
+**New here?** [`TUTORIAL.md`](TUTORIAL.md) walks a real C bounds check all the way to a CI gate in
+about fifteen minutes — including what it looks like when the guard is wrong.
+
+## CLI reference
+
+```
+certkit {check,explain,init,sos,demo}
+```
+
+| Command | What it does |
+|---|---|
+| `certkit demo` | Run the bundled Heartbleed example: one valid certificate, one forged. No files needed. |
+| `certkit init` | Scaffold a spec from written relations, so you never hand-write JSON atoms. |
+| `certkit check` | Decide a spec/certificate pair. This is the one CI runs. |
+| `certkit explain` | Print the refutation arithmetic — which atoms, which weights, what cancels. |
+| `certkit sos` | Check a rational sum-of-squares certificate. |
+
+### `certkit init`
+
+```bash
+certkit init \
+  --domain "0 <= payload" --domain "payload <= 65535" \
+  --guard  "19 + payload <= record_len" \
+  --safety "3 + payload <= record_len" \
+  --name heartbleed -o heartbleed.spec.json
+```
+
+| Flag | Meaning |
+|---|---|
+| `--domain RELATION` | A bound on the attacker's inputs. Repeatable. |
+| `--guard RELATION` | The check your code performs. Repeatable. |
+| `--safety RELATION` | The property that must hold. Repeatable; one obligation each. |
+| `--name`, `-o/--out` | Spec name; output path (stdout if omitted). |
+
+Accepts `<=`, `<`, `>=`, `>`, integer coefficients with `*`, and `+`/`-`. Rejects `==` (that is two
+atoms — write both), chained comparisons, and anything nonlinear, rather than guessing. Parsing the
+relations above reproduces the hand-written bundled spec byte for byte, fingerprint included.
+
+### `certkit check`
+
+| Flag | Meaning |
+|---|---|
+| `--spec`, `--cert` | The pair to check. Required. |
+| `--no-fingerprint` | Skip the binding check. Can only ever yield `UNVERIFIED` (exit 3), never `ACCEPTED`. |
+| `--json` | Machine-readable report, including `verdict` and `binding_verified`. |
+
+### `certkit explain`
+
+Takes the same `--spec` and `--cert`. Prints the arithmetic and **exits with the same status as
+`check`**, so dropping it into a script does not launder a refusal into a success.
+
+```
+    [2]  payload - record_len + 19 <= 0
+    [3]  -payload + record_len - 3 < 0
+
+  Multiply each atom by its nonnegative weight and add:
+
+    1 * [2]    (payload - record_len + 19 <= 0)
+    1 * [3]    (-payload + record_len - 3 < 0)
+
+  Every variable cancels: payload, record_len all sum to 0.
+
+  What remains is:  16 < 0
+```
+
 ## Three verdicts, and why there are three
 
 | Verdict | Exit | Meaning |
@@ -67,10 +132,10 @@ In the API the same distinction is two separate booleans, because they fail sepa
 
 ```python
 report = check_certificate(spec, cert, require_fingerprint=False)
-report.obligations_ok    # True  -- the multipliers really do refute the obligation
+report.obligations_ok  # True  -- the multipliers really do refute the obligation
 report.binding_verified  # False -- but nothing ties this certificate to this spec
-report.ok                # False -- so the overall answer is no
-report.verdict           # 'UNVERIFIED'
+report.ok  # False -- so the overall answer is no
+report.verdict  # 'UNVERIFIED'
 ```
 
 A refusal means *not proven* — never *proven false*. So does an `UNVERIFIED`.
@@ -84,9 +149,9 @@ payload in `[0, 65535]`.
 ```python
 from certkit import atom, make_spec, check_certificate
 
-domain = [atom({"payload": -1}), atom({"payload": 1}, -65535)]   # 0 <= payload <= 65535
-guard  = [atom({"payload": 1, "record_len": -1}, 19)]            # 19 + payload <= record_len
-safety = [atom({"payload": 1, "record_len": -1}, 3)]             #  3 + payload <= record_len
+domain = [atom({"payload": -1}), atom({"payload": 1}, -65535)]  # 0 <= payload <= 65535
+guard = [atom({"payload": 1, "record_len": -1}, 19)]  # 19 + payload <= record_len
+safety = [atom({"payload": 1, "record_len": -1}, 3)]  #  3 + payload <= record_len
 
 spec = make_spec(domain, guard, safety, name="heartbleed")
 
@@ -97,7 +162,7 @@ cert = {
 }
 
 report = check_certificate(spec, cert)
-assert report            # truthy when every obligation is refuted
+assert report  # truthy when every obligation is refuted
 ```
 
 Those multipliers are the whole proof. Atom 2 is the guard (`payload - record_len + 19 <= 0`) and
@@ -208,7 +273,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-135 tests. The negative cases are the interesting ones: hostile indices, negative and float
+174 tests. The negative cases are the interesting ones: hostile indices, negative and float
 multipliers, non-cancelling variables, feasible systems, tampered specs, cross-bound certificates,
 and a forged certificate that carries its own easy system. A checker that accepts a valid
 certificate is table stakes; one that rejects near-misses is the product.
@@ -231,6 +296,15 @@ preserve validity; scaling by 0 must destroy it) and the CLI exit-code contract.
 | **[pytest-mutation-verified](https://github.com/nickharris808/pytest-mutation-verified)** | prove your regression test can actually fail |
 | **[cve-proof-corpus](https://huggingface.co/datasets/nickh007/cve-proof-corpus)** | six real CVEs with machine-checkable proofs |
 | **[Try it in your browser](https://huggingface.co/spaces/nickh007/certkit-demo)** | no install; watch a forgery get refused |
+
+## Documentation
+
+| | |
+|---|---|
+| [`TUTORIAL.md`](TUTORIAL.md) | a real C bounds check to a CI gate, end to end |
+| [`SCOPE.md`](SCOPE.md) | what a verdict proves, and what it does not |
+| [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) | every error string, and what fixes it |
+| [`SPEC.md`](SPEC.md) | the on-disk format, for emitting it from your own solver |
 
 ---
 
