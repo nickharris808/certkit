@@ -33,7 +33,7 @@ from .cert import (
 from .farkas import FarkasResult, verify_farkas
 from .sos import SOS_SCHEMA, verify_sos
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "ACCEPTED",

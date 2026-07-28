@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/nickharris808/certkit/main/src/certkit/schemas/certkit-spec-v1.schema.json",
+  "title": "certkit specification, v1",
+  "description": "The claim: within `domain`, `guard` implies every conjunct of `safety`. Relations are linear over the rationals, with exact [numerator, denominator] coefficients. This schema constrains shape only -- it cannot tell you whether the relations describe your program, which is the human's job.",
+  "type": "object",
+  "required": ["schema", "safety"],
+  "properties": {
+    "schema": {
+      "const": "certkit/spec/v1"
+    },
+    "name": {
+      "type": "string",
+      "description": "A label for humans. Not load-bearing, but it is covered by the fingerprint."
+    },
+    "domain": {
+      "type": "array",
+      "description": "Bounds on the attacker-controlled inputs. Assumed, not proved.",
+      "items": { "$ref": "#/$defs/atom" }
+    },
+    "guard": {
+      "type": "array",
+      "description": "The check the program performs.",
+      "items": { "$ref": "#/$defs/atom" }
+    },
+    "safety": {
+      "type": "array",
+      "description": "The property that must hold. A conjunction: one obligation per element.",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/atom" }
+    },
+    "safety_index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Which safety conjunct a single reconstructed obligation refutes."
+    },
+    "fingerprint": {
+      "$ref": "#/$defs/sha256",
+      "description": "SHA-256 over the canonical JSON of this object with `fingerprint` removed. Detects drift; it is NOT a defence against a forger who controls the spec."
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "rational": {
+      "description": "An exact rational as [numerator, denominator]; a bare integer is also accepted. The denominator must not be zero.",
+      "oneOf": [
+        { "type": "integer" },
+        {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "type": "integer" },
+          "prefixItems": [{ "type": "integer" }, { "type": "integer", "not": { "const": 0 } }]
+        }
+      ]
+    },
+    "atom": {
+      "type": "object",
+      "description": "A linear relation in canonical form: sum(coeff*var) + const <= 0, or < 0 when strict.",
+      "required": ["coeff"],
+      "properties": {
+        "coeff": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/rational" },
+          "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z_0-9]*$" }
+        },
+        "const": { "$ref": "#/$defs/rational" },
+        "strict": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/nickharris808/certkit/main/src/certkit/schemas/certkit-farkas-v1.schema.json",
+  "title": "certkit Farkas certificate, v1",
+  "description": "Nonnegative multipliers that refute each obligation of a spec. Note what is absent: a certificate carries no atoms. The checker rebuilds every obligation from the spec and lets the certificate supply only weights, so a certificate proving some easier unrelated system cannot pass. Any extra keys here are ignored by the checker.",
+  "type": "object",
+  "required": ["schema", "obligations"],
+  "properties": {
+    "schema": {
+      "const": "certkit/farkas/v1"
+    },
+    "spec_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Binds this certificate to one spec. Required unless fingerprint checking is explicitly disabled, in which case the result can only ever be UNVERIFIED -- never ACCEPTED."
+    },
+    "obligations": {
+      "type": "array",
+      "description": "One entry per safety conjunct, in the same order as the spec's `safety` array.",
+      "items": {
+        "type": "object",
+        "required": ["multipliers"],
+        "properties": {
+          "multipliers": {
+            "type": "object",
+            "description": "Atom index -> nonnegative weight. Indices are positions in the RECONSTRUCTED obligation `domain ++ guard ++ [negate(safety[i])]`, not in anything the certificate carries. JSON object keys are strings, so indices are decimal strings.",
+            "minProperties": 1,
+            "propertyNames": { "pattern": "^(0|[1-9][0-9]*)$" },
+            "additionalProperties": { "$ref": "#/$defs/nonneg_rational" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nonneg_rational": {
+      "description": "A nonnegative exact rational. Negative weights would flip an inequality and let you prove anything, so they are rejected by the checker.",
+      "oneOf": [
+        { "type": "integer", "minimum": 0 },
+        { "type": "string", "pattern": "^[0-9]+(/[1-9][0-9]*)?$" },
+        {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "integer", "exclusiveMinimum": 0 }
+          ],
+          "items": { "type": "integer" }
+        }
+      ]
+    }
+  }
+}

@@ -65,6 +65,7 @@ certkit {check,explain,init,sos,demo}
 | `certkit check` | Decide a spec/certificate pair. This is the one CI runs. |
 | `certkit explain` | Print the refutation arithmetic — which atoms, which weights, what cancels. |
 | `certkit sos` | Check a rational sum-of-squares certificate. |
+| `certkit schema` | Print the JSON Schema for a format, so other tools can emit it. |
 
 ### `certkit init`
 
@@ -93,7 +94,46 @@ relations above reproduces the hand-written bundled spec byte for byte, fingerpr
 |---|---|
 | `--spec`, `--cert` | The pair to check. Required. |
 | `--no-fingerprint` | Skip the binding check. Can only ever yield `UNVERIFIED` (exit 3), never `ACCEPTED`. |
-| `--json` | Machine-readable report, including `verdict` and `binding_verified`. |
+| `--json` | Shorthand for `--format json`. |
+| `--format` | `text`, `json`, `sarif`, `junit`, or `markdown`. See below. |
+
+### Output formats
+
+```bash
+certkit check --spec my.spec.json --cert my.cert.json --format sarif > certkit.sarif
+```
+
+| Format | For |
+|---|---|
+| `text` | a terminal |
+| `json` | scripts; the report verbatim, including `verdict` and `binding_verified` |
+| `sarif` | GitHub code scanning — a refusal becomes an alert on the PR |
+| `junit` | most CI systems render this natively |
+| `markdown` | a PR comment or job summary |
+
+Changing the format never changes the verdict or the exit code. `UNVERIFIED` is its own level in
+every one of them — SARIF rule `certkit/unverified`, a JUnit failure of type `unverified` — because
+a format that rendered it as a pass would undo the reason the third verdict exists.
+
+### Emitting certkit from your own tool
+
+```bash
+certkit schema --format certkit/spec/v1 > spec.schema.json
+```
+
+Both formats have a published JSON Schema, shipped inside the wheel and validated in CI against
+every bundled example and 200 generated specs. `SPEC.md` explains the format to a person; the schema
+explains it to a program.
+
+```python
+from certkit.schemas import load_schema, schema_for
+
+load_schema("certkit/farkas/v1")  # by format id
+schema_for(my_document)  # by the document's own `schema` field
+```
+
+Validating against them needs a JSON Schema library, which is a development dependency here —
+`certkit` itself still imports nothing outside the standard library.
 
 ### `certkit explain`
 

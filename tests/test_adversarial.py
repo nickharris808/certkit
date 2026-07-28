@@ -346,3 +346,90 @@ def test_cli_exit_code_one_for_a_refusal(tmp_path):
     spec_p = _write(tmp_path, "s.json", SPEC)
     cert_p = _write(tmp_path, "c.json", _cert({"0": 1, "1": 1}))
     assert cli_main(["check", "--spec", spec_p, "--cert", cert_p]) == 1
+
+
+# --------------------------------------------------------------------------- #
+# scaling -- the obligation loop must stay linear in the conjunct count
+#
+# `check_certificate` used to rebuild the whole obligation per safety conjunct,
+# re-parsing the shared domain+guard prefix every time. That is quadratic: at
+# 400 conjuncts x 200 atoms it made 240,400 atom_from_json calls instead of 601,
+# and 98% of runtime was parsing.
+#
+# These assert *call counts*, not wall-clock, so they are deterministic and
+# cannot flake on a loaded CI runner.
+# --------------------------------------------------------------------------- #
+
+
+def _count_atom_parses(spec, cert, monkeypatch):
+    from certkit import cert as cert_mod
+
+    calls = [0]
+    real = cert_mod.atom_from_json
+
+    def counting(a):
+        calls[0] += 1
+        return real(a)
+
+    monkeypatch.setattr(cert_mod, "atom_from_json", counting)
+    check_certificate(spec, cert)
+    return calls[0]
+
+
+def _many_conjunct_pair(k, n_dom):
+    dom = [atom({f"v{i}": 1}, -1000) for i in range(n_dom)]
+    g = [atom({"payload": 1, "record_len": -1}, 19)]
+    s = [atom({"payload": 1, "record_len": -1}, 3) for _ in range(k)]
+    spec = make_spec(dom, g, s, name=f"k{k}")
+    gi, ni = n_dom, n_dom + 1
+    cert = {
+        "schema": "certkit/farkas/v1",
+        "spec_fingerprint": spec["fingerprint"],
+        "obligations": [{"multipliers": {str(gi): 1, str(ni): 1}} for _ in range(k)],
+    }
+    return spec, cert
+
+
+def test_spec_atoms_are_parsed_exactly_once(monkeypatch):
+    """The whole spec is parsed once, however many conjuncts it has."""
+    k, n_dom = 50, 100
+    spec, cert = _many_conjunct_pair(k, n_dom)
+    parses = _count_atom_parses(spec, cert, monkeypatch)
+    # domain + guard + every safety conjunct, once each.
+    assert parses == n_dom + 1 + k
+
+
+def test_obligation_loop_is_linear_not_quadratic(monkeypatch):
+    """Doubling the conjuncts must not square the parse count."""
+    n_dom = 100
+    a = _count_atom_parses(*_many_conjunct_pair(20, n_dom), monkeypatch)
+    b = _count_atom_parses(*_many_conjunct_pair(40, n_dom), monkeypatch)
+    # Linear: b - a == 20 extra safety atoms. Quadratic would be thousands.
+    assert b - a == 20
+
+
+def test_many_conjuncts_still_verify_correctly():
+    """The fast path must not change any verdict."""
+    spec, cert = _many_conjunct_pair(200, 50)
+    report = check_certificate(spec, cert)
+    assert report.verdict == ACCEPTED
+    assert len(report.obligations) == 200
+    assert all(o["ok"] for o in report.obligations)
+
+
+def test_one_malformed_atom_fails_every_obligation_with_a_reason():
+    """Parsing up front means a bad atom refuses the spec, never a traceback."""
+    spec = {
+        "schema": "certkit/spec/v1",
+        "domain": [{"coeff": {"x": [1, 0]}}],  # zero denominator
+        "guard": [],
+        "safety": [{"coeff": {"x": [1, 1]}}, {"coeff": {"x": [2, 1]}}],
+    }
+    cert = {
+        "schema": "certkit/farkas/v1",
+        "obligations": [{"multipliers": {"0": 1}}, {"multipliers": {"0": 1}}],
+    }
+    report = check_certificate(spec, cert, require_fingerprint=False)
+    assert report.verdict == REFUSED
+    assert len(report.obligations) == 2
+    assert all("malformed spec atom" in o["reason"] for o in report.obligations)

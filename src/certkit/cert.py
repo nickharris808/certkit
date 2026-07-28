@@ -62,6 +62,21 @@ def fingerprint(spec: Mapping[str, Any]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _parse_spec_atoms(spec: Mapping[str, Any]) -> tuple[list[Atom], list[Atom]]:
+    """Parse a spec's atoms once: the ``domain ++ guard`` prefix, and safety.
+
+    Every obligation shares the same prefix and differs only in which safety
+    conjunct is negated onto the end. Parsing is the expensive part -- each atom
+    builds a Fraction per coefficient -- so :func:`check_certificate` parses once
+    here and reuses the result across all conjuncts, rather than re-parsing the
+    whole spec per obligation.
+    """
+    prefix: list[Atom] = [atom_from_json(a) for a in spec.get("domain", [])]
+    prefix += [atom_from_json(a) for a in spec.get("guard", [])]
+    safety: list[Atom] = [atom_from_json(a) for a in spec.get("safety", [])]
+    return prefix, safety
+
+
 def reconstruct_obligation(spec: Mapping[str, Any]) -> list[Atom]:
     """Rebuild ``domain AND guard AND NOT(safety)`` from a specification.
 
@@ -71,17 +86,13 @@ def reconstruct_obligation(spec: Mapping[str, Any]) -> list[Atom]:
     formed per conjunct. Callers wanting the whole property iterate over the
     indices -- see :func:`check_certificate`.
     """
-    atoms: list[Atom] = [atom_from_json(a) for a in spec.get("domain", [])]
-    atoms += [atom_from_json(a) for a in spec.get("guard", [])]
-
-    safety = [atom_from_json(a) for a in spec.get("safety", [])]
+    prefix, safety = _parse_spec_atoms(spec)
     idx = int(spec.get("safety_index", 0))
     if not safety:
         raise ValueError("spec has no safety conjuncts")
     if idx < 0 or idx >= len(safety):
         raise ValueError(f"safety_index {idx} out of range")
-    atoms.append(negate(safety[idx]))
-    return atoms
+    return [*prefix, negate(safety[idx])]
 
 
 class CheckReport:
@@ -212,27 +223,36 @@ def check_certificate(
             f" obligation(s); spec requires {len(safety)}",
         )
 
+    # Parse the spec's atoms once rather than once per obligation. Every
+    # obligation is `domain ++ guard ++ [negate(safety[i])]`, so only the last
+    # element differs; re-parsing the shared prefix k times made the check
+    # quadratic in the number of safety conjuncts.
+    #
+    # A spec is attacker-controlled input like any other, so a malformed atom --
+    # a zero denominator, an Infinity coefficient, a string where an object
+    # belongs -- is a refusal with a reason, never a traceback out of the
+    # checker. Parsing up front means one bad atom fails every obligation, which
+    # is correct: the spec as a whole could not be rebuilt.
+    try:
+        prefix, safety_atoms = _parse_spec_atoms(body)
+    except (ValueError, TypeError, KeyError, AttributeError, ArithmeticError) as exc:
+        reason = f"malformed spec atom: {type(exc).__name__}: {exc}"
+        return CheckReport(
+            False,
+            [{"index": i, "ok": False, "reason": reason} for i in range(len(safety))],
+            reason,
+            binding_verified=binding_verified,
+        )
+
+    # One list, reused across obligations: only the final slot changes. Safe
+    # because verify_farkas reads the sequence and never retains it.
+    obligation: list[Atom] = [*prefix, negate(safety_atoms[0])]
+
     results: list[dict[str, Any]] = []
     all_ok = True
     for i in range(len(safety)):
-        sub = dict(body)
-        sub["safety_index"] = i
-        try:
-            atoms = reconstruct_obligation(sub)
-        except (ValueError, TypeError, KeyError, AttributeError, ArithmeticError) as exc:
-            # A spec is attacker-controlled input like any other. A malformed
-            # atom -- a zero denominator, an Infinity coefficient, a string
-            # where an object belongs -- is a refusal with a reason, never a
-            # traceback out of the checker.
-            results.append(
-                {
-                    "index": i,
-                    "ok": False,
-                    "reason": f"malformed spec atom: {type(exc).__name__}: {exc}",
-                }
-            )
-            all_ok = False
-            continue
+        obligation[-1] = negate(safety_atoms[i])
+        atoms = obligation
 
         entry = per_obligation[i]
         multipliers = entry.get("multipliers") if isinstance(entry, Mapping) else None

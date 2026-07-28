@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "certkit"
-version = "0.2.0"
+version = "0.3.0"
 description = "A certificate format for machine-checked program admission, and an independent checker for it."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -21,7 +21,9 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+# jsonschema is used only by the schema conformance tests. certkit itself
+# imports nothing outside the standard library, which is the point.
+dev = ["pytest>=7.0", "jsonschema>=4.0"]
 
 [project.scripts]
 certkit = "certkit.cli:main"

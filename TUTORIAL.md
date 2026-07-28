@@ -181,13 +181,17 @@ For the concrete input to put in a regression test, ask for a counterexample:
 from crs_mcp import certify_guard
 
 v = certify_guard(
-    domain=[{"coeff": {"len": -1}}, {"coeff": {"len": 1}, "const": -4095},
-            {"coeff": {"off": -1}}, {"coeff": {"off": 1}, "const": -4095}],
+    domain=[
+        {"coeff": {"len": -1}},
+        {"coeff": {"len": 1}, "const": -4095},
+        {"coeff": {"off": -1}},
+        {"coeff": {"off": 1}, "const": -4095},
+    ],
     guard=[{"coeff": {"off": 1, "len": 1}, "const": -4097}],
     safety=[{"coeff": {"off": 1, "len": 1}, "const": -4096}],
     box={"len": [0, 4095], "off": [0, 4095]},
 )
-print(v.verdict)   # PROVEN_UNSOUND
+print(v.verdict)  # PROVEN_UNSOUND
 print(v.summary)
 ```
 ```

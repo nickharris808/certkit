@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Any
 
 from .cert import UNVERIFIED, check_certificate
+from .report import FORMATS, render
+from .schemas import SCHEMA_FILES, load_schema
 from .sos import verify_sos
 
 
@@ -95,7 +97,16 @@ def main(argv: Any = None) -> int:
             "shown to be about this spec"
         ),
     )
-    p_check.add_argument("--json", action="store_true", help="emit machine-readable output")
+    p_check.add_argument("--json", action="store_true", help="shorthand for --format json")
+    p_check.add_argument(
+        "--format",
+        choices=FORMATS,
+        default="text",
+        help=(
+            "output format. 'sarif' feeds GitHub code scanning; 'junit' is rendered "
+            "natively by most CI systems; 'markdown' suits a PR comment."
+        ),
+    )
 
     p_explain = sub.add_parser(
         "explain",
@@ -132,6 +143,17 @@ def main(argv: Any = None) -> int:
     p_init.add_argument("--name", default="unnamed")
     p_init.add_argument("-o", "--out", type=Path, help="write here instead of stdout")
 
+    p_schema = sub.add_parser(
+        "schema",
+        help="print the JSON Schema for a certkit format, so other tools can emit it",
+    )
+    p_schema.add_argument(
+        "--format",
+        dest="schema_name",
+        default="certkit/spec/v1",
+        choices=sorted(SCHEMA_FILES),
+    )
+
     p_sos = sub.add_parser("sos", help="check a sum-of-squares certificate")
     p_sos.add_argument("--cert", required=True, type=Path)
 
@@ -155,21 +177,11 @@ def main(argv: Any = None) -> int:
 
         report = check_certificate(spec, cert, require_fingerprint=not args.no_fingerprint)
 
-        if args.json:
-            print(json.dumps(report.to_dict(), indent=2))
-        else:
-            print(f"{report.verdict}: {spec.get('name', '<unnamed>')}")
-            if report.reason:
-                print(f"  reason: {report.reason}")
-            for ob in report.obligations:
-                mark = "ok " if ob["ok"] else "FAIL"
-                detail = f" -- {ob['reason']}" if ob["reason"] else ""
-                print(f"  [{mark}] obligation {ob['index']}{detail}")
-            if not report.binding_verified:
-                print(
-                    "  NOTE: every obligation was refuted, but with no trust anchor this "
-                    "is UNVERIFIED, not ACCEPTED. Re-run without --no-fingerprint."
-                )
+        fmt = "json" if args.json else args.format
+        # SARIF anchors findings at a file, so pass the spec path rather than the
+        # spec's own name -- a code-scanning alert has to point somewhere real.
+        label = str(args.spec) if fmt == "sarif" else spec.get("name", "<unnamed>")
+        print(render(report, fmt, name=label))
         if report.verdict == UNVERIFIED:
             return 3
         return 0 if report.ok else 1
@@ -214,6 +226,10 @@ def main(argv: Any = None) -> int:
             )
         else:
             print(text)
+        return 0
+
+    if args.command == "schema":
+        print(json.dumps(load_schema(args.schema_name), indent=2))
         return 0
 
     if args.command == "sos":
