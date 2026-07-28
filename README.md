@@ -1,20 +1,26 @@
 # certkit
 
 [![ci](https://github.com/nickharris808/certkit/actions/workflows/ci.yml/badge.svg)](https://github.com/nickharris808/certkit/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/certkit.svg)](https://pypi.org/project/certkit/)
-[![Python](https://img.shields.io/pypi/pyversions/certkit.svg)](https://pypi.org/project/certkit/)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+[![status](https://img.shields.io/badge/status-pre--release-orange.svg)](#install)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](pyproject.toml)
 
 **A certificate format for machine-checked program admission, and an independent checker for it.**
 
+> **Try it now, no install:** [open the browser demo](https://huggingface.co/spaces/nickh007/certkit-demo) and press **Load a forgery** — the checker refuses it, client-side.
+
 The checker imports nothing outside the Python standard library. No solver, no search, no
 floating-point arithmetic. It fits in an afternoon of reading, which is the entire point: you should
 not have to trust the tool that *produced* a proof in order to believe the proof.
 
+<a id="install"></a>
+```bash
+pip install "certkit@git+https://github.com/nickharris808/certkit@main"
 ```
-pip install certkit
-```
+
+> **Pre-release.** The PyPI name is reserved and publication is imminent; until then the line above
+> is the working install. It is tested in CI on Linux, macOS, and Windows.
 
 ## 30-second quickstart
 
@@ -178,6 +184,19 @@ pytest
 multipliers, non-cancelling variables, feasible systems, tampered specs, cross-bound certificates,
 and a forged certificate that carries its own easy system. A checker that accepts a valid
 certificate is table stakes; one that rejects near-misses is the product.
+
+## The rest of the toolkit
+
+| | |
+|---|---|
+| **[certkit](https://github.com/nickharris808/certkit)** | the certificate format and the independent checker |
+| **[exploit-counter](https://github.com/nickharris808/exploit-counter)** | if a guard is unsound, exactly how many states escape |
+| **[crs-mcp](https://github.com/nickharris808/crs-mcp)** | the verdict surface AI coding agents call, over MCP |
+| **[soundnessbench](https://github.com/nickharris808/soundnessbench)** | the benchmark that grades all of the above |
+| **[certkit-action](https://github.com/nickharris808/certkit-action)** | run the check in your CI |
+| **[pytest-mutation-verified](https://github.com/nickharris808/pytest-mutation-verified)** | prove your regression test can actually fail |
+| **[cve-proof-corpus](https://huggingface.co/datasets/nickh007/cve-proof-corpus)** | six real CVEs with machine-checkable proofs |
+| **[Try it in your browser](https://huggingface.co/spaces/nickh007/certkit-demo)** | no install; watch a forgery get refused |
 
 ---
 
