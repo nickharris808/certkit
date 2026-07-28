@@ -1,0 +1,71 @@
+{
+  "schema": "certkit/spec/v1",
+  "name": "heartbleed",
+  "domain": [
+    {
+      "coeff": {
+        "payload": [
+          -1,
+          1
+        ]
+      },
+      "const": [
+        0,
+        1
+      ],
+      "strict": false
+    },
+    {
+      "coeff": {
+        "payload": [
+          1,
+          1
+        ]
+      },
+      "const": [
+        -65535,
+        1
+      ],
+      "strict": false
+    }
+  ],
+  "guard": [
+    {
+      "coeff": {
+        "payload": [
+          1,
+          1
+        ],
+        "record_len": [
+          -1,
+          1
+        ]
+      },
+      "const": [
+        19,
+        1
+      ],
+      "strict": false
+    }
+  ],
+  "safety": [
+    {
+      "coeff": {
+        "payload": [
+          1,
+          1
+        ],
+        "record_len": [
+          -1,
+          1
+        ]
+      },
+      "const": [
+        3,
+        1
+      ],
+      "strict": false
+    }
+  ],
+  "fingerprint": "f273dad14d09578fd5a4d4daf3f9d12dc6732434231f7d89b5b84d9b60ba86e1"
+}

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "certkit"
+version = "0.1.0"
+description = "A certificate format for machine-checked program admission, and an independent checker for it."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+keywords = ["formal-verification", "proof-carrying-code", "farkas", "sum-of-squares", "smt"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+  "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+certkit = "certkit.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/certkit"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

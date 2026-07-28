@@ -1,0 +1,16 @@
+# Lint configuration shared across the packages.
+line-length = 100
+target-version = "py39"
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4"]
+ignore = [
+  "E501",   # line length is enforced by the formatter, not the linter
+  "B008",   # function call in default arg -- not used here, but noisy if it appears
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["B011"]
+
+[format]
+quote-style = "double"

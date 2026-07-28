@@ -1,0 +1,12 @@
+{
+  "schema": "certkit/farkas/v1",
+  "spec_fingerprint": "f273dad14d09578fd5a4d4daf3f9d12dc6732434231f7d89b5b84d9b60ba86e1",
+  "obligations": [
+    {
+      "multipliers": {
+        "2": 1,
+        "3": 1
+      }
+    }
+  ]
+}
