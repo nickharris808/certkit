@@ -158,6 +158,31 @@ Note also that an SMT-LIB file carries no notion of which relations are assumpti
 check, so **every assertion becomes a safety conjunct** and you move them into `domain` and `guard`
 yourself. That is a modelling decision; guessing it would change what gets proved.
 
+### In a notebook
+
+`CheckReport` renders itself in Jupyter — three verdicts, three colours, and `UNVERIFIED` gets its
+own rather than being folded into pass or fail. `exploit-counter`'s `Decision` and `OverAcceptance`
+and `crs-mcp`'s `Verdict` do the same. A notebook is where a result is most likely to be skimmed
+rather than read, so an abstention that looked like a pass would do the most damage there.
+
+### As a pre-commit hook
+
+```yaml
+repos:
+  - repo: https://github.com/nickharris808/certkit
+    rev: main
+    hooks:
+      - id: certkit
+```
+
+Every staged `*.cert.json` is checked against the `*.spec.json` beside it. A certificate with no
+spec beside it **fails**, rather than being skipped — a gate that silently skips what it cannot
+check reports "all certificates verified" while verifying none. `UNVERIFIED` blocks the commit too:
+in a gate, "declined to certify" and "refused" have the same consequence.
+
+`ci-templates/` has the same job for GitLab CI and CircleCI, both emitting JUnit their UI renders
+natively.
+
 ### Emitting certkit from your own tool
 
 ```bash

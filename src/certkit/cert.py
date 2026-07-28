@@ -159,6 +159,17 @@ class CheckReport:
             f"reason={self.reason!r})"
         )
 
+    def _repr_html_(self) -> str:
+        """Rendering for Jupyter. Imported lazily so `cert` stays standalone.
+
+        The renderer gives UNVERIFIED its own colour rather than folding it into
+        pass or fail -- a notebook is exactly where a verdict is most likely to
+        be skimmed rather than read.
+        """
+        from .notebook import report_html
+
+        return report_html(self)
+
 
 def check_certificate(
     spec: Mapping[str, Any],

@@ -1,0 +1,27 @@
+# certkit in GitLab CI.
+#
+# Copy into .gitlab-ci.yml, or `include:` it. The job fails the pipeline on a
+# REFUSED (exit 1) *and* on an UNVERIFIED (exit 3), because in a gate they mean
+# the same thing: the proof does not currently hold.
+
+certkit:
+  image: python:3.12-slim
+  before_script:
+    - pip install --quiet "certkit@git+https://github.com/nickharris808/certkit@main"
+  script:
+    - |
+      status=0
+      for cert in $(find . -name '*.cert.json'); do
+        spec="${cert%.cert.json}.spec.json"
+        if [ ! -f "$spec" ]; then
+          echo "no spec beside $cert -- cannot check it, and will not pretend to"
+          status=1
+          continue
+        fi
+        certkit check --spec "$spec" --cert "$cert" --format junit > "$(basename "$cert").xml" || status=$?
+      done
+      exit $status
+  artifacts:
+    when: always
+    reports:
+      junit: "*.cert.json.xml"

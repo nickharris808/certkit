@@ -40,7 +40,7 @@ from .smtlib import (
 )
 from .sos import SOS_SCHEMA, verify_sos
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "ACCEPTED",

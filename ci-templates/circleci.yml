@@ -1,0 +1,39 @@
+# certkit in CircleCI. Copy the job into .circleci/config.yml.
+#
+# Exit 3 (UNVERIFIED) fails the job on purpose: "declined to certify" is not a
+# softer "refused" when the result is a merge decision.
+
+version: 2.1
+
+jobs:
+  certkit:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run:
+          name: Install certkit
+          command: pip install "certkit@git+https://github.com/nickharris808/certkit@main"
+      - run:
+          name: Check every certificate against the spec beside it
+          command: |
+            status=0
+            mkdir -p test-results
+            for cert in $(find . -name '*.cert.json'); do
+              spec="${cert%.cert.json}.spec.json"
+              if [ ! -f "$spec" ]; then
+                echo "no spec beside $cert"
+                status=1
+                continue
+              fi
+              certkit check --spec "$spec" --cert "$cert" --format junit \
+                > "test-results/$(basename "$cert").xml" || status=$?
+            done
+            exit $status
+      - store_test_results:
+          path: test-results
+
+workflows:
+  verify:
+    jobs:
+      - certkit

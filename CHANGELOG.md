@@ -3,6 +3,19 @@
 All notable changes to this package. Format follows [Keep a Changelog](https://keepachangelog.com/);
 versioning is [semantic](https://semver.org/).
 
+## [0.4.0]
+
+### Added
+- **Notebook rendering.** `CheckReport._repr_html_()` shows the verdict in Jupyter, with
+  `UNVERIFIED` in its own colour and its own sentence — a notebook is where a result is most likely
+  to be skimmed, so an abstention rendered like a pass would be the most damaging place to do it.
+  Hostile spec names and refusal reasons are escaped.
+- **pre-commit hook** (`.pre-commit-hooks.yaml`, `certkit-precommit`). Checks every staged
+  `*.cert.json` against the `*.spec.json` beside it. A certificate with no spec **fails** rather
+  than being skipped, and `UNVERIFIED` blocks the commit.
+- **CI templates for GitLab and CircleCI** in `ci-templates/`, both emitting JUnit and both treating
+  exit 3 as a failure.
+
 ## [0.3.0]
 
 ### Added

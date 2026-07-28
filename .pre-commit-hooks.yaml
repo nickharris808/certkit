@@ -1,0 +1,28 @@
+# certkit as a pre-commit hook.
+#
+#   repos:
+#     - repo: https://github.com/nickharris808/certkit
+#       rev: main
+#       hooks:
+#         - id: certkit
+#
+# The hook checks every *.cert.json staged for commit against the *.spec.json
+# beside it. A refusal or an UNVERIFIED result blocks the commit, because both
+# mean the proof does not currently hold -- exit 3 is not a softer exit 1 here.
+- id: certkit
+  name: certkit (check proof certificates)
+  description: Re-check each staged certkit certificate against its specification.
+  entry: certkit-precommit
+  language: python
+  files: '\.cert\.json$'
+  pass_filenames: true
+
+- id: certkit-check
+  name: certkit check (explicit spec/cert pair)
+  description: >-
+    Run `certkit check` on one pair. Supply --spec and --cert in `args`; use this
+    when your files are not named alongside each other.
+  entry: certkit check
+  language: python
+  files: '\.(spec|cert)\.json$'
+  pass_filenames: false
