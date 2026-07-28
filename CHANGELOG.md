@@ -6,6 +6,11 @@ versioning is [semantic](https://semver.org/).
 ## [0.4.0]
 
 ### Added
+- **`certkit lsp` — a language server.** Diagnostics on `*.spec.json` as you type, in any editor
+  with an LSP client. Standard library only: a JSON-RPC framing loop, no pygls, no dependency. It
+  reports structure, the verdict of a `*.cert.json` beside the spec, and variables the domain never
+  bounds. It never offers to "fix" a guard and never reports one as correct — an empty diagnostic
+  list means nothing was found wrong with the *file*.
 - **Notebook rendering.** `CheckReport._repr_html_()` shows the verdict in Jupyter, with
   `UNVERIFIED` in its own colour and its own sentence — a notebook is where a result is most likely
   to be skimmed, so an abstention rendered like a pass would be the most damaging place to do it.

@@ -68,6 +68,7 @@ certkit {check,explain,init,sos,demo}
 | `certkit schema` | Print the JSON Schema for a format, so other tools can emit it. |
 | `certkit export` | Emit each obligation as SMT-LIB 2, for z3 / cvc5 / anything else. |
 | `certkit import` | Read an SMT-LIB 2 script back into a spec (linear integer fragment). |
+| `certkit lsp` | A language server: diagnostics on spec files, in your editor, as you type. |
 
 ### `certkit init`
 
@@ -157,6 +158,23 @@ wrong theorem. Refusing is the only safe behaviour.
 Note also that an SMT-LIB file carries no notion of which relations are assumptions and which is the
 check, so **every assertion becomes a safety conjunct** and you move them into `domain` and `guard`
 yourself. That is a modelling decision; guessing it would change what gets proved.
+
+### In your editor
+
+```bash
+certkit lsp        # speaks LSP over stdio; standard library only, no pygls
+```
+
+Point any editor's LSP client at it for `*.spec.json` and you get diagnostics while you write the
+guard rather than after CI has stopped you merging. It reports three things: structural problems in
+the spec, the verdict of checking a `*.cert.json` sitting beside it, and variables the guard uses
+that the domain never bounds.
+
+That last one is information, not an error — an unbounded variable makes the claim *stronger* (the
+obligation has to hold for every value it could take) and therefore harder to prove, which is the
+first thing to check when a guard you believe is correct will not verify. The server has no producer
+in it, so it never offers to "fix" a guard, and it never tells you one is correct: no diagnostics
+means nothing was found wrong with the *file*.
 
 ### In a notebook
 
@@ -433,3 +451,7 @@ What costs money is *producing* certificates at scale.
 ## License
 
 Apache-2.0. Copying is the point — this is a format we want adopted, not a moat.
+
+---
+
+Part of **[certified discovery](https://nickharris808.github.io/certified-discovery/)** — ten artifacts built on one asymmetry: checking a proof is cheap and auditable, so the thing that produced it does not have to be trusted.

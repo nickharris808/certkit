@@ -178,6 +178,11 @@ def main(argv: Any = None) -> int:
     p_sos.add_argument("--cert", required=True, type=Path)
 
     sub.add_parser(
+        "lsp",
+        help="run a language server over stdio: diagnostics for spec files as you type",
+    )
+
+    sub.add_parser(
         "demo",
         help="run the bundled example (needs no files; works straight from pip install)",
     )
@@ -186,6 +191,11 @@ def main(argv: Any = None) -> int:
 
     if args.command == "demo":
         return _demo()
+
+    if args.command == "lsp":
+        from .lsp import main as lsp_main
+
+        return lsp_main()
 
     if args.command == "check":
         try:
