@@ -36,6 +36,7 @@ the same property the checker itself is built around.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, BinaryIO
@@ -57,11 +58,19 @@ def uri_to_path(uri: str) -> Path | None:
 
     A server that guessed at an unfamiliar scheme would end up reading a file the
     editor never mentioned.
+
+    On Windows an editor sends ``file:///c%3A/x/a.spec.json``, whose parsed path
+    is ``/c:/x/a.spec.json`` -- a leading slash before the drive letter that
+    makes the path invalid. It is stripped here. The Windows CI matrix is what
+    surfaced this; a POSIX-only test would have passed forever.
     """
     parsed = urlparse(uri)
     if parsed.scheme != "file":
         return None
-    return Path(unquote(parsed.path))
+    path = unquote(parsed.path)
+    if re.match(r"^/[A-Za-z]:", path):
+        path = path[1:]
+    return Path(path)
 
 
 def _line_of(text: str, needle: str) -> int:

@@ -289,17 +289,33 @@ def test_end_of_input_ends_the_server_cleanly():
 
 
 @pytest.mark.parametrize(
-    "uri,expected",
+    "uri,expected_parts",
     [
-        ("file:///tmp/a.spec.json", "/tmp/a.spec.json"),
-        ("file:///tmp/with%20space.spec.json", "/tmp/with space.spec.json"),
+        ("file:///tmp/a.spec.json", ("tmp", "a.spec.json")),
+        ("file:///tmp/with%20space.spec.json", ("tmp", "with space.spec.json")),
         ("http://example.com/a.json", None),
         ("untitled:Untitled-1", None),
     ],
 )
-def test_uri_handling_refuses_schemes_it_does_not_understand(uri, expected):
+def test_uri_handling_refuses_schemes_it_does_not_understand(uri, expected_parts):
+    """Compared by path parts, not by string: the separator is the platform's
+    business, and a POSIX-only assertion failed the Windows matrix for a
+    difference that was not a defect."""
     result = uri_to_path(uri)
-    assert (str(result) if result else None) == expected
+    if expected_parts is None:
+        assert result is None
+    else:
+        assert result is not None
+        assert result.parts[-len(expected_parts) :] == expected_parts
+
+
+def test_a_windows_drive_letter_uri_does_not_keep_its_leading_slash():
+    """`file:///c%3A/x/a.spec.json` parses to `/c:/x/a.spec.json`, which is not a
+    path Windows can open. Found by the CI matrix, not by me."""
+    result = uri_to_path("file:///c%3A/work/a.spec.json")
+    assert result is not None
+    assert not str(result).startswith("/c:")
+    assert str(result).lower().startswith("c:")
 
 
 def test_a_malformed_frame_does_not_kill_the_server():
