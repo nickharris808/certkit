@@ -11,7 +11,12 @@ versioning is [semantic](https://semver.org/).
   deliberately partial and refuses anything outside quantifier-free linear integer arithmetic
   **by name** — a silent partial import would produce a spec proving a weaker theorem than the file
   stated. A dedicated CI job runs the differential against z3 (and cvc5 where available) and fails
-  if no solver is present, so the cross-check cannot degrade into a silent skip.
+  if no solver is present, so the cross-check cannot degrade into a silent skip. That job earned
+  its keep on its first run: the emitter wrote `-1`, which is a *symbol* in SMT-LIB 2 rather than a
+  numeral. z3 accepts it as an extension; a standards-strict cvc5 refused the whole script. Negative
+  integers are now emitted as `(- 1)`, and a text assertion catches a regression without needing a
+  strict solver locally. Exported scripts also no longer end in `(get-model)`, which is an error
+  after `unsat` -- the success case was exiting non-zero and looking like a broken run.
 - `certkit schema --format certkit/spec/v1` prints the **JSON Schema** for either format, so other
   tools can emit certkit documents mechanically instead of from prose. Schemas ship in the wheel.
 - `certkit check --format {text,json,sarif,junit,markdown}`. SARIF feeds GitHub code scanning;

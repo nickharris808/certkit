@@ -358,3 +358,53 @@ def test_a_proved_obligation_exits_clean(solver, tmp_path):
     assert out.returncode == 0, out.stdout + out.stderr
     assert out.stdout.strip() == "unsat"
     assert "error" not in (out.stdout + out.stderr).lower()
+
+
+# --------------------------------------------------------------------------- #
+# standards conformance: negative numerals
+# --------------------------------------------------------------------------- #
+
+
+def test_export_never_emits_a_bare_negative_numeral():
+    """`-1` is a *symbol* in SMT-LIB 2, not a number.
+
+    z3 accepts it as an extension, so this shipped looking fine and only the
+    strict cvc5 in CI rejected it -- `Symbol '-1' not declared as a variable`,
+    and the whole script refused. This assertion catches it without needing a
+    strict solver on the machine running the tests.
+    """
+    import re
+
+    for script in export_spec(SPEC) + [export_obligation(DOMAIN, GUARD, SAFETY, 0)]:
+        body = script.split("(set-logic")[1]
+        assert not re.search(r"[\s(]-\d", body), body
+
+
+def test_negative_constants_survive_the_round_trip():
+    """`(- 65535)` must read back as -65535, not as a variable named '- 65535'."""
+    spec = make_spec(
+        [atom({"x": -1}, -65535)],
+        [atom({"x": -3}, 7)],
+        [atom({"x": 1}, -2)],
+        name="negatives",
+    )
+    got = [atom_from_json(a) for a in import_spec(export_spec(spec)[0])["safety"]]
+    body = {k: v for k, v in spec.items() if k != "fingerprint"}
+    body["safety_index"] = 0
+    assert all(_same(a, b) for a, b in zip(got, reconstruct_obligation(body)))
+
+
+def test_a_negative_coefficient_is_still_read_as_linear():
+    """`(* (- 1) x)` is linear. Treating the `(- 1)` term as the variable part
+    made it look like a product of two non-constants."""
+    text = "(declare-const x Int)(assert (<= (* (- 1) x) 0))"
+    got = atom_from_json(import_spec(text)["safety"][0])
+    assert got.coeff == {"x": -1}
+
+
+def test_a_genuine_product_is_still_refused_alongside_negatives():
+    """The looser factor handling must not loosen the nonlinear check."""
+    text = "(declare-const x Int)(declare-const y Int)(assert (<= (* (- 1) x y) 0))"
+    with pytest.raises(SmtLibUnsupported) as exc:
+        import_spec(text)
+    assert "nonlinear" in str(exc.value)

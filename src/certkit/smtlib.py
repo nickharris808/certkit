@@ -76,15 +76,15 @@ def _term(a: Atom, *, negated: bool = False) -> str:
         n = int(c)
         if n == 0:
             continue
-        parts.append(v if n == 1 else f"(* {n} {v})")
+        parts.append(v if n == 1 else f"(* {_numeral(n)} {v})")
     const = a.const * scale
     assert const.denominator == 1
     k = int(const)
 
     if not parts:
-        lhs = str(k)
+        lhs = _numeral(k)
     elif k:
-        lhs = f"(+ {' '.join(parts)} {k})"
+        lhs = f"(+ {' '.join(parts)} {_numeral(k)})"
     elif len(parts) == 1:
         lhs = parts[0]
     else:
@@ -93,6 +93,17 @@ def _term(a: Atom, *, negated: bool = False) -> str:
     op = "<" if a.strict else "<="
     body = f"({op} {lhs} 0)"
     return f"(not {body})" if negated else body
+
+
+def _numeral(n: int) -> str:
+    """Render an integer as an SMT-LIB 2 term.
+
+    ``-1`` is not a numeral in SMT-LIB 2 -- the grammar's numerals are
+    non-negative, and a leading minus makes it a *symbol*. z3 accepts it as an
+    extension; a standards-strict cvc5 reports `Symbol '-1' not declared as a
+    variable` and refuses the whole script. The portable spelling is ``(- 1)``.
+    """
+    return str(n) if n >= 0 else f"(- {-n})"
 
 
 def _gcd(a: int, b: int) -> int:
@@ -236,24 +247,22 @@ def _linear(node: Any, sign: Fraction = Fraction(1)) -> tuple[dict[str, Fraction
         return coeff, const
 
     if head == "*":
-        # Exactly one non-constant factor, or it is not linear.
-        consts: list[Fraction] = []
+        # Exactly one non-constant factor, or it is not linear. Each factor is
+        # evaluated rather than pattern-matched on being a bare numeral, because
+        # a constant can arrive as a term: `(- 1)` is how SMT-LIB 2 spells -1,
+        # and treating it as the variable part made `(* (- 1) x)` look nonlinear.
+        factor = sign
         var_part: Any = None
         for r in rest:
-            try:
-                consts.append(Fraction(r) if isinstance(r, str) else None)  # type: ignore[arg-type]
-                if consts[-1] is None:
-                    raise ValueError
-            except (ValueError, TypeError):
-                consts.pop() if consts and consts[-1] is None else None
-                if var_part is not None:
-                    raise SmtLibUnsupported(
-                        "nonlinear multiplication: certkit handles linear arithmetic only"
-                    ) from None
-                var_part = r
-        factor = sign
-        for c in consts:
-            factor *= c
+            coeff_r, const_r = _linear(r)
+            if not coeff_r:
+                factor *= const_r
+                continue
+            if var_part is not None:
+                raise SmtLibUnsupported(
+                    "nonlinear multiplication: certkit handles linear arithmetic only"
+                )
+            var_part = r
         if var_part is None:
             return {}, factor
         return _linear(var_part, factor)
