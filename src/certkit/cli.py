@@ -143,6 +143,26 @@ def main(argv: Any = None) -> int:
     p_init.add_argument("--name", default="unnamed")
     p_init.add_argument("-o", "--out", type=Path, help="write here instead of stdout")
 
+    p_export = sub.add_parser(
+        "export",
+        help="emit each obligation as an SMT-LIB 2 script a solver can check",
+    )
+    p_export.add_argument("--spec", required=True, type=Path)
+    p_export.add_argument(
+        "--smtlib", action="store_true", help="(the only format today; accepted for clarity)"
+    )
+    p_export.add_argument(
+        "-o", "--out", type=Path, help="write here; one file per obligation when there are several"
+    )
+
+    p_import = sub.add_parser(
+        "import",
+        help="read an SMT-LIB 2 script into a certkit spec (linear integer fragment only)",
+    )
+    p_import.add_argument("--smtlib", required=True, type=Path, metavar="FILE")
+    p_import.add_argument("--name", default="imported")
+    p_import.add_argument("-o", "--out", type=Path)
+
     p_schema = sub.add_parser(
         "schema",
         help="print the JSON Schema for a certkit format, so other tools can emit it",
@@ -226,6 +246,62 @@ def main(argv: Any = None) -> int:
             )
         else:
             print(text)
+        return 0
+
+    if args.command == "export":
+        try:
+            spec = _load(args.spec)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        from .smtlib import SmtLibError, export_spec
+
+        try:
+            scripts = export_spec(spec)
+        except (SmtLibError, ValueError, TypeError, KeyError, ArithmeticError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
+        if not args.out:
+            print(("\n" + ";" + "-" * 70 + "\n").join(scripts))
+            return 0
+        if len(scripts) == 1:
+            args.out.write_text(scripts[0], encoding="utf-8")
+            print(f"wrote {args.out}")
+        else:
+            stem = args.out.with_suffix("")
+            for i, s in enumerate(scripts):
+                path = Path(f"{stem}.{i}{args.out.suffix or '.smt2'}")
+                path.write_text(s, encoding="utf-8")
+                print(f"wrote {path}")
+        print("Check with:  z3 <file>    (unsat means the guard implies safety)")
+        return 0
+
+    if args.command == "import":
+        from .smtlib import SmtLibError, import_spec
+
+        try:
+            text = args.smtlib.read_text(encoding="utf-8")
+        except OSError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        try:
+            spec = import_spec(text, name=args.name)
+        except SmtLibError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
+        out = json.dumps(spec, indent=2)
+        if args.out:
+            args.out.write_text(out + "\n", encoding="utf-8")
+            print(f"wrote {args.out}")
+            print(
+                f"Every assertion became a safety conjunct ({len(spec['safety'])} of them). "
+                "Move the assumptions into 'domain' and the check into 'guard' yourself -- "
+                "an SMT-LIB file does not say which is which."
+            )
+        else:
+            print(out)
         return 0
 
     if args.command == "schema":

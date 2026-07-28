@@ -6,6 +6,12 @@ versioning is [semantic](https://semver.org/).
 ## [0.3.0]
 
 ### Added
+- **SMT-LIB 2 bridge.** `certkit export` writes each obligation as a script z3 or cvc5 can check
+  (`unsat` = the guard implies safety); `certkit import` reads one back. Export is total; import is
+  deliberately partial and refuses anything outside quantifier-free linear integer arithmetic
+  **by name** — a silent partial import would produce a spec proving a weaker theorem than the file
+  stated. A dedicated CI job runs the differential against z3 (and cvc5 where available) and fails
+  if no solver is present, so the cross-check cannot degrade into a silent skip.
 - `certkit schema --format certkit/spec/v1` prints the **JSON Schema** for either format, so other
   tools can emit certkit documents mechanically instead of from prose. Schemas ship in the wheel.
 - `certkit check --format {text,json,sarif,junit,markdown}`. SARIF feeds GitHub code scanning;

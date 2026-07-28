@@ -31,12 +31,24 @@ from .cert import (
     reconstruct_obligation,
 )
 from .farkas import FarkasResult, verify_farkas
+from .smtlib import (
+    SmtLibError,
+    SmtLibUnsupported,
+    export_obligation,
+    export_spec,
+    import_spec,
+)
 from .sos import SOS_SCHEMA, verify_sos
 
 __version__ = "0.3.0"
 
 __all__ = [
     "ACCEPTED",
+    "export_spec",
+    "export_obligation",
+    "import_spec",
+    "SmtLibError",
+    "SmtLibUnsupported",
     "REFUSED",
     "UNVERIFIED",
     "Atom",

@@ -66,6 +66,8 @@ certkit {check,explain,init,sos,demo}
 | `certkit explain` | Print the refutation arithmetic — which atoms, which weights, what cancels. |
 | `certkit sos` | Check a rational sum-of-squares certificate. |
 | `certkit schema` | Print the JSON Schema for a format, so other tools can emit it. |
+| `certkit export` | Emit each obligation as SMT-LIB 2, for z3 / cvc5 / anything else. |
+| `certkit import` | Read an SMT-LIB 2 script back into a spec (linear integer fragment). |
 
 ### `certkit init`
 
@@ -114,6 +116,47 @@ certkit check --spec my.spec.json --cert my.cert.json --format sarif > certkit.s
 Changing the format never changes the verdict or the exit code. `UNVERIFIED` is its own level in
 every one of them — SARIF rule `certkit/unverified`, a JUnit failure of type `unverified` — because
 a format that rendered it as a pass would undo the reason the third verdict exists.
+
+### Talking to solvers (SMT-LIB 2)
+
+`certkit export` writes the obligation `domain AND guard AND NOT(safety[i])` as an SMT-LIB script:
+
+```bash
+certkit export --spec heartbleed.spec.json -o obligation.smt2
+z3 obligation.smt2      # unsat
+cvc5 obligation.smt2    # unsat
+```
+
+`unsat` is the same claim an `ACCEPTED` certificate makes, reached by a completely independent
+implementation. `sat` means the guard really does admit a forbidden state, and the model is your
+counterexample. Both directions are cross-checked over a sweep of guard/safety pairs — if certkit
+ever accepted something a solver called `sat`, that test fails. CI runs this against **z3** on every
+push and fails if no solver is present, so the check cannot degrade into a silent skip; a second
+solver (**cvc5**) is used as well wherever it is installed, and the two must agree.
+
+Going the other way is deliberately partial:
+
+```bash
+certkit import --smtlib theirs.smt2 -o spec.json
+```
+
+certkit handles quantifier-free **linear integer** arithmetic. Anything else — a nonlinear product,
+a `Real` or `BitVec` sort, an uninterpreted function, a quantifier, an equality — is refused with
+the construct named, rather than dropped:
+
+```
+error: sort 'Real' for 'x': certkit handles Int only (no Real, Bool, or BitVec)
+error: nonlinear multiplication: certkit handles linear arithmetic only
+error: an equality is two atoms; assert the two inequalities you mean instead
+```
+
+A partial importer that silently ignored what it did not understand would produce a spec proving
+something *weaker* than the file said, and everything downstream would then be correct about the
+wrong theorem. Refusing is the only safe behaviour.
+
+Note also that an SMT-LIB file carries no notion of which relations are assumptions and which is the
+check, so **every assertion becomes a safety conjunct** and you move them into `domain` and `guard`
+yourself. That is a modelling decision; guessing it would change what gets proved.
 
 ### Emitting certkit from your own tool
 
