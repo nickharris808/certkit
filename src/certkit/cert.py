@@ -35,6 +35,9 @@ from .farkas import FarkasResult, verify_farkas
 __all__ = [
     "CERT_SCHEMA",
     "SPEC_SCHEMA",
+    "ACCEPTED",
+    "REFUSED",
+    "UNVERIFIED",
     "fingerprint",
     "reconstruct_obligation",
     "check_certificate",
@@ -43,6 +46,14 @@ __all__ = [
 
 CERT_SCHEMA = "certkit/farkas/v1"
 SPEC_SCHEMA = "certkit/spec/v1"
+
+#: Every obligation was refuted **and** the certificate was bound to this spec.
+ACCEPTED = "ACCEPTED"
+#: At least one obligation was not refuted.
+REFUSED = "REFUSED"
+#: The arithmetic checked out, but a required precondition was never established
+#: -- so no claim is being made. This is not a pass.
+UNVERIFIED = "UNVERIFIED"
 
 
 def fingerprint(spec: Mapping[str, Any]) -> str:
@@ -74,23 +85,68 @@ def reconstruct_obligation(spec: Mapping[str, Any]) -> list[Atom]:
 
 
 class CheckReport:
-    """Aggregate result across every safety conjunct of a specification."""
+    """Aggregate result across every safety conjunct of a specification.
 
-    __slots__ = ("ok", "obligations", "reason")
+    Two things must hold before this reports success, and they are tracked
+    separately because they can fail separately:
 
-    def __init__(self, ok: bool, obligations: list[dict[str, Any]], reason: str = "") -> None:
-        self.ok = ok
+    ``obligations_ok``
+        every safety conjunct was refuted by the supplied multipliers.
+    ``binding_verified``
+        the certificate was cryptographically bound to *this* spec.
+
+    ``ok`` is the conjunction. A certificate whose arithmetic is impeccable but
+    which was never bound to the spec proves nothing about the spec, so it
+    reports :data:`UNVERIFIED` -- never ``ACCEPTED``, and never silently ``ok``.
+    """
+
+    __slots__ = ("obligations", "reason", "obligations_ok", "binding_verified")
+
+    def __init__(
+        self,
+        ok: bool,
+        obligations: list[dict[str, Any]],
+        reason: str = "",
+        *,
+        binding_verified: bool = True,
+    ) -> None:
+        self.obligations_ok = ok
+        self.binding_verified = binding_verified
         self.obligations = obligations
         self.reason = reason
+
+    @property
+    def ok(self) -> bool:
+        """True only when the proof checks *and* it is bound to this spec."""
+        return self.obligations_ok and self.binding_verified
+
+    @property
+    def verdict(self) -> str:
+        """:data:`ACCEPTED`, :data:`REFUSED`, or :data:`UNVERIFIED`."""
+        if not self.obligations_ok:
+            return REFUSED
+        if not self.binding_verified:
+            return UNVERIFIED
+        return ACCEPTED
 
     def __bool__(self) -> bool:
         return self.ok
 
     def to_dict(self) -> dict[str, Any]:
-        return {"ok": self.ok, "reason": self.reason, "obligations": self.obligations}
+        return {
+            "verdict": self.verdict,
+            "ok": self.ok,
+            "obligations_ok": self.obligations_ok,
+            "binding_verified": self.binding_verified,
+            "reason": self.reason,
+            "obligations": self.obligations,
+        }
 
     def __repr__(self) -> str:
-        return f"CheckReport(ok={self.ok!r}, n={len(self.obligations)}, reason={self.reason!r})"
+        return (
+            f"CheckReport(verdict={self.verdict!r}, n={len(self.obligations)}, "
+            f"reason={self.reason!r})"
+        )
 
 
 def check_certificate(
@@ -102,7 +158,15 @@ def check_certificate(
     """Verify that ``cert`` proves the guard implies safety over the domain.
 
     One obligation is checked per safety conjunct. Every obligation must be
-    refuted for the report to be ``ok``.
+    refuted, **and** the certificate must be bound to this spec, for the report
+    to be ``ok``.
+
+    Passing ``require_fingerprint=False`` skips the binding check. It does not
+    make the result an acceptance: the report comes back with
+    ``binding_verified=False`` and ``verdict == UNVERIFIED``, because a
+    certificate that was never tied to this spec has not been shown to say
+    anything about this spec. The escape hatch is for authoring workflows where
+    the fingerprint has not been computed yet, not for relaxing the verdict.
     """
     if cert.get("schema") != CERT_SCHEMA:
         return CheckReport(False, [], f"unexpected certificate schema {cert.get('schema')!r}")
@@ -111,6 +175,9 @@ def check_certificate(
 
     body = {k: v for k, v in spec.items() if k != "fingerprint"}
     actual = fingerprint(body)
+
+    binding_verified = True
+    binding_note = ""
 
     if require_fingerprint:
         declared = spec.get("fingerprint")
@@ -121,8 +188,18 @@ def check_certificate(
             return CheckReport(False, [], "certificate is not bound to a spec fingerprint")
         if bound != actual:
             return CheckReport(False, [], "certificate is bound to a different spec")
+    else:
+        binding_verified = False
+        binding_note = (
+            "TRUST ANCHOR ABSENT: fingerprint checking was disabled, so this certificate "
+            "was never tied to the supplied spec. The multipliers below were checked "
+            "against the spec's own reconstructed atoms, but nothing establishes that "
+            "this certificate was issued for this spec. Not an acceptance."
+        )
 
     safety = spec.get("safety", [])
+    if not isinstance(safety, Sequence) or isinstance(safety, (str, bytes)):
+        return CheckReport(False, [], f"spec 'safety' must be a list, got {type(safety).__name__}")
     if not safety:
         return CheckReport(False, [], "spec has no safety conjuncts")
 
@@ -142,8 +219,18 @@ def check_certificate(
         sub["safety_index"] = i
         try:
             atoms = reconstruct_obligation(sub)
-        except ValueError as exc:
-            results.append({"index": i, "ok": False, "reason": str(exc)})
+        except (ValueError, TypeError, KeyError, AttributeError, ArithmeticError) as exc:
+            # A spec is attacker-controlled input like any other. A malformed
+            # atom -- a zero denominator, an Infinity coefficient, a string
+            # where an object belongs -- is a refusal with a reason, never a
+            # traceback out of the checker.
+            results.append(
+                {
+                    "index": i,
+                    "ok": False,
+                    "reason": f"malformed spec atom: {type(exc).__name__}: {exc}",
+                }
+            )
             all_ok = False
             continue
 
@@ -158,7 +245,14 @@ def check_certificate(
         results.append({"index": i, "ok": bool(res), "reason": res.reason})
         all_ok = all_ok and bool(res)
 
-    return CheckReport(all_ok, results, "" if all_ok else "one or more obligations failed")
+    if not all_ok:
+        reason = "one or more obligations failed"
+        if binding_note:
+            reason = f"{reason}; also: {binding_note}"
+    else:
+        reason = binding_note
+
+    return CheckReport(all_ok, results, reason, binding_verified=binding_verified)
 
 
 def make_spec(

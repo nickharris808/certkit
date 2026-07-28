@@ -19,8 +19,11 @@ See ``SPEC.md`` for the on-disk format.
 
 from .atoms import Atom, atom, atom_from_json, atom_to_json, negate
 from .cert import (
+    ACCEPTED,
     CERT_SCHEMA,
+    REFUSED,
     SPEC_SCHEMA,
+    UNVERIFIED,
     CheckReport,
     check_certificate,
     fingerprint,
@@ -30,9 +33,12 @@ from .cert import (
 from .farkas import FarkasResult, verify_farkas
 from .sos import SOS_SCHEMA, verify_sos
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
+    "ACCEPTED",
+    "REFUSED",
+    "UNVERIFIED",
     "Atom",
     "atom",
     "negate",

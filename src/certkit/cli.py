@@ -2,12 +2,16 @@
 
 Exit codes are part of the contract, because this is meant to run in CI:
 
-    0  every obligation refuted -- the guard implies safety over the domain
-    1  at least one obligation not refuted, or the certificate is malformed
+    0  ACCEPTED   -- every obligation refuted, and the certificate is bound to
+                     this spec
+    1  REFUSED    -- at least one obligation not refuted, or malformed input
     2  usage error (missing file, unreadable JSON)
+    3  UNVERIFIED -- the arithmetic checked out but a required precondition was
+                     never established (``--no-fingerprint``). No claim is made.
 
 Note that exit 1 means "not proven", never "proven false". A refusal is a
-refusal.
+refusal. Exit 3 is neither: it is the tool declining to certify something it
+did not fully check, and CI should treat it as a failure, not a pass.
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .cert import check_certificate
+from .cert import UNVERIFIED, check_certificate
 from .sos import verify_sos
 
 
@@ -47,7 +51,7 @@ def _demo() -> int:
     print()
 
     ok = check_certificate(spec, good)
-    print(f"  valid certificate  -> {'ACCEPTED' if ok else 'REFUSED'}")
+    print(f"  valid certificate  -> {ok.verdict}")
     for obligation in ok.obligations:
         detail = f" -- {obligation['reason']}" if obligation["reason"] else ""
         print(
@@ -56,7 +60,7 @@ def _demo() -> int:
         )
 
     bad = check_certificate(spec, forged)
-    print(f"  forged certificate -> {'ACCEPTED' if bad else 'REFUSED'}")
+    print(f"  forged certificate -> {bad.verdict}")
     for obligation in bad.obligations:
         detail = f" -- {obligation['reason']}" if obligation["reason"] else ""
         print(
@@ -85,7 +89,11 @@ def main(argv: Any = None) -> int:
     p_check.add_argument(
         "--no-fingerprint",
         action="store_true",
-        help="skip spec/certificate binding (for local experimentation only)",
+        help=(
+            "skip the spec/certificate binding check. The result can then only ever be "
+            "UNVERIFIED (exit 3), never ACCEPTED -- an unbound certificate has not been "
+            "shown to be about this spec"
+        ),
     )
     p_check.add_argument("--json", action="store_true", help="emit machine-readable output")
 
@@ -115,14 +123,20 @@ def main(argv: Any = None) -> int:
         if args.json:
             print(json.dumps(report.to_dict(), indent=2))
         else:
-            status = "ACCEPTED" if report.ok else "REFUSED"
-            print(f"{status}: {spec.get('name', '<unnamed>')}")
+            print(f"{report.verdict}: {spec.get('name', '<unnamed>')}")
             if report.reason:
                 print(f"  reason: {report.reason}")
             for ob in report.obligations:
                 mark = "ok " if ob["ok"] else "FAIL"
                 detail = f" -- {ob['reason']}" if ob["reason"] else ""
                 print(f"  [{mark}] obligation {ob['index']}{detail}")
+            if not report.binding_verified:
+                print(
+                    "  NOTE: every obligation was refuted, but with no trust anchor this "
+                    "is UNVERIFIED, not ACCEPTED. Re-run without --no-fingerprint."
+                )
+        if report.verdict == UNVERIFIED:
+            return 3
         return 0 if report.ok else 1
 
     if args.command == "sos":

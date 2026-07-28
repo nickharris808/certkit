@@ -49,8 +49,31 @@ To check your own files:
 certkit check --spec my.spec.json --cert my.cert.json
 ```
 
-Exit codes are part of the contract: `0` accepted, `1` refused, `2` usage error. A refusal means
-*not proven* — never *proven false*.
+## Three verdicts, and why there are three
+
+| Verdict | Exit | Meaning |
+|---|---|---|
+| `ACCEPTED` | 0 | Every obligation was refuted **and** the certificate is bound to this spec. |
+| `REFUSED` | 1 | At least one obligation was not refuted, or the input was malformed. |
+| `UNVERIFIED` | 3 | The arithmetic checked out, but a required precondition was never established. **Not a pass.** |
+
+`UNVERIFIED` exists because of `--no-fingerprint`. That flag skips the check binding the certificate
+to the spec — useful while authoring, when the fingerprint has not been computed yet. But a
+certificate that was never tied to this spec has not been shown to say anything *about* this spec, so
+reporting it as accepted would be a pass on input the checker did not fully validate. It now reports
+`UNVERIFIED` and exits 3, and the reason line says `TRUST ANCHOR ABSENT` in those words.
+
+In the API the same distinction is two separate booleans, because they fail separately:
+
+```python
+report = check_certificate(spec, cert, require_fingerprint=False)
+report.obligations_ok    # True  -- the multipliers really do refute the obligation
+report.binding_verified  # False -- but nothing ties this certificate to this spec
+report.ok                # False -- so the overall answer is no
+report.verdict           # 'UNVERIFIED'
+```
+
+A refusal means *not proven* — never *proven false*. So does an `UNVERIFIED`.
 
 ## The worked example
 
@@ -173,6 +196,11 @@ independently verify is worth nothing. What costs money is producing certificate
 | `check_certificate(spec, cert)` | full check across every safety conjunct |
 | `reconstruct_obligation(spec)` | rebuild `domain AND guard AND NOT(safety)` |
 
+`check_certificate` returns a `CheckReport` with `.verdict`, `.ok`, `.obligations_ok`,
+`.binding_verified`, `.reason`, and `.obligations`. It never raises on malformed input — a spec is
+attacker-controlled just like a certificate, so a zero denominator or an `Infinity` coefficient is a
+refusal carrying a reason, not a traceback.
+
 ## Tests
 
 ```bash
@@ -180,10 +208,16 @@ pip install -e ".[dev]"
 pytest
 ```
 
-58 tests. The negative cases are the interesting ones: hostile indices, negative and float
+135 tests. The negative cases are the interesting ones: hostile indices, negative and float
 multipliers, non-cancelling variables, feasible systems, tampered specs, cross-bound certificates,
 and a forged certificate that carries its own easy system. A checker that accepts a valid
 certificate is table stakes; one that rejects near-misses is the product.
+
+`tests/test_adversarial.py` is the permanent guard against one specific failure — the checker saying
+`ACCEPTED` on something it did not fully check. Its oracle is *no input may produce a
+confident-looking answer that is wrong*, and it covers malformed, empty, enormous, and
+out-of-distribution input, plus metamorphic relations (scaling every multiplier by any *k* > 0 must
+preserve validity; scaling by 0 must destroy it) and the CLI exit-code contract.
 
 ## The rest of the toolkit
 
