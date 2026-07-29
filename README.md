@@ -399,7 +399,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-174 tests. The negative cases are the interesting ones: hostile indices, negative and float
+541 tests, and the count in this sentence is itself checked by one of them. The negative cases are the interesting ones: hostile indices, negative and float
 multipliers, non-cancelling variables, feasible systems, tampered specs, cross-bound certificates,
 and a forged certificate that carries its own easy system. A checker that accepts a valid
 certificate is table stakes; one that rejects near-misses is the product.
