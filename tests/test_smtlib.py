@@ -41,7 +41,13 @@ from certkit.smtlib import (
     parse_sexpr,
 )
 
-SOLVERS = [s for s in ("z3", "cvc5") if shutil.which(s)]
+#: The solvers this suite knows how to drive. Fixed, not discovered: parametrising
+#: over what happens to be installed makes the *collected test count* depend on
+#: the machine, which broke the README-count check between a laptop with two
+#: solvers and a CI runner with none. Availability is now a skip at run time,
+#: where it belongs, and collection is identical everywhere.
+KNOWN_SOLVERS = ("z3", "cvc5")
+SOLVERS = [s for s in KNOWN_SOLVERS if shutil.which(s)]
 REQUIRED = os.environ.get("CERTKIT_REQUIRE_SOLVERS") == "1"
 
 
@@ -64,6 +70,18 @@ SPEC = make_spec(DOMAIN, GUARD, SAFETY, name="heartbleed")
 
 def _same(a, b) -> bool:
     return a.coeff == b.coeff and a.const == b.const and a.strict == b.strict
+
+
+def _require(solver: str) -> None:
+    """Skip when this solver is absent -- unless CI has demanded one be present.
+
+    A skip is invisible in a green run, which is why CERTKIT_REQUIRE_SOLVERS
+    exists; this keeps that guarantee while making collection deterministic.
+    """
+    if solver not in SOLVERS:
+        if REQUIRED and not SOLVERS:
+            pytest.fail("CERTKIT_REQUIRE_SOLVERS=1 but no solver is on PATH")
+        pytest.skip(f"{solver} is not installed")
 
 
 def _run_solver(solver: str, script: str, tmp_path) -> str:
@@ -231,9 +249,9 @@ def test_imported_spec_is_fingerprinted_and_valid():
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.skipif(not SOLVERS, reason="no SMT solver on PATH")
-@pytest.mark.parametrize("solver", SOLVERS)
+@pytest.mark.parametrize("solver", KNOWN_SOLVERS)
 def test_solver_says_unsat_when_certkit_accepts(solver, tmp_path):
+    _require(solver)
     """certkit ACCEPTED means the obligation is infeasible. A solver must agree."""
     cert = json.loads(example_path("heartbleed.cert.json").read_text(encoding="utf-8"))
     spec = json.loads(example_path("heartbleed.spec.json").read_text(encoding="utf-8"))
@@ -241,17 +259,17 @@ def test_solver_says_unsat_when_certkit_accepts(solver, tmp_path):
     assert _run_solver(solver, export_spec(spec)[0], tmp_path) == "unsat"
 
 
-@pytest.mark.skipif(not SOLVERS, reason="no SMT solver on PATH")
-@pytest.mark.parametrize("solver", SOLVERS)
+@pytest.mark.parametrize("solver", KNOWN_SOLVERS)
 def test_solver_says_sat_when_the_guard_is_genuinely_unsound(solver, tmp_path):
+    _require(solver)
     """The converse direction: a real gap must show up as a model."""
     weak = make_spec(DOMAIN, [atom({"payload": 1, "record_len": -1}, 1)], SAFETY, name="weak")
     assert _run_solver(solver, export_spec(weak)[0], tmp_path) == "sat"
 
 
-@pytest.mark.skipif(not SOLVERS, reason="no SMT solver on PATH")
-@pytest.mark.parametrize("solver", SOLVERS)
+@pytest.mark.parametrize("solver", KNOWN_SOLVERS)
 def test_differential_certkit_versus_solver_across_many_guards(solver, tmp_path):
+    _require(solver)
     """Sweep guard/safety pairs; certkit's verdict and the solver must never differ.
 
     certkit accepts exactly when guard_overhead >= safety_overhead, because that
@@ -283,7 +301,7 @@ def test_differential_certkit_versus_solver_across_many_guards(solver, tmp_path)
                 assert not certkit_proves, (gk, sk)
 
 
-@pytest.mark.skipif(len(SOLVERS) < 2, reason="need two solvers to cross-check")
+@pytest.mark.skipif(len(SOLVERS) < 2, reason="need two solvers to cross-check")  # noqa: PT031
 def test_two_independent_solvers_agree(tmp_path):
     for gk, sk in ((19, 3), (1, 3), (3, 3), (0, 5)):
         spec = make_spec(
@@ -342,9 +360,9 @@ def test_cli_import_missing_file_is_a_usage_error(tmp_path, capsys):
     assert "error:" in capsys.readouterr().err
 
 
-@pytest.mark.skipif(not SOLVERS, reason="no SMT solver on PATH")
-@pytest.mark.parametrize("solver", SOLVERS)
+@pytest.mark.parametrize("solver", KNOWN_SOLVERS)
 def test_a_proved_obligation_exits_clean(solver, tmp_path):
+    _require(solver)
     """The success case must not look like a tool failure.
 
     The script used to end in `(get-model)`, which is an error after `unsat` --
