@@ -452,6 +452,16 @@ What costs money is *producing* certificates at scale.
 
 Apache-2.0. Copying is the point — this is a format we want adopted, not a moat.
 
+## Licence, citation, contributing
+
+Apache-2.0 ([`LICENSE`](LICENSE)). If you use this in work you publish, there is machine-readable
+citation metadata in [`CITATION.cff`](CITATION.cff) — GitHub's "Cite this repository" button reads it.
+
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — the house rules, and the one invariant a change must not break.
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — the module map and where the trust boundary sits.
+- [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) — keyed to the error messages this actually prints.
+- [`SECURITY.md`](SECURITY.md) — a checker that accepts something false is the highest severity class here.
+
 ---
 
 Part of **[certified discovery](https://nickharris808.github.io/certified-discovery/)** — ten artifacts built on one asymmetry: checking a proof is cheap and auditable, so the thing that produced it does not have to be trusted.
