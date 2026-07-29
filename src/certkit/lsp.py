@@ -125,12 +125,27 @@ def _validate_structure(spec: Any, text: str) -> list[dict[str, Any]]:
     for field in ("domain", "guard", "safety"):
         value = spec.get(field)
         if value is None:
-            if field == "safety":
-                out.append(
-                    _diagnostic(
-                        0, ERROR, "a spec needs at least one safety conjunct", "spec/safety"
+            if field not in spec:
+                # Absent is fine for domain and guard (an empty conjunction), and
+                # fatal for safety.
+                if field == "safety":
+                    out.append(
+                        _diagnostic(
+                            0, ERROR, "a spec needs at least one safety conjunct", "spec/safety"
+                        )
                     )
+                continue
+            # Present but null is not an empty list. The checker refuses it, so
+            # the editor must not show a clean file. The stress suite found this:
+            # `"guard": null` produced no diagnostic at all.
+            out.append(
+                _diagnostic(
+                    _line_of(text, f'"{field}"'),
+                    ERROR,
+                    f"'{field}' is null. Use [] for an empty conjunction, or remove the key.",
+                    f"spec/{field}",
                 )
+            )
             continue
         if not isinstance(value, list):
             out.append(
@@ -164,30 +179,58 @@ def _validate_structure(spec: Any, text: str) -> list[dict[str, Any]]:
                     )
                 )
             for var, pair in atom["coeff"].items():
-                if not (isinstance(pair, list) and len(pair) == 2):
-                    out.append(
-                        _diagnostic(
-                            _line_of(text, var),
-                            ERROR,
-                            f"{field}[{i}] coefficient for {var!r} must be "
-                            "[numerator, denominator]",
-                            f"spec/{field}/coeff",
-                        )
-                    )
-                elif pair[1] == 0:
-                    out.append(
-                        _diagnostic(
-                            _line_of(text, var),
-                            ERROR,
-                            f"{field}[{i}] coefficient for {var!r} has a zero denominator",
-                            "spec/zero-denominator",
-                        )
-                    )
+                out.extend(_pair_problems(pair, text, var, f"{field}[{i}] coefficient for {var!r}"))
+            if const is not None:
+                out.extend(_pair_problems(const, text, f'"{field}"', f"{field}[{i}] 'const'"))
     if not spec.get("safety"):
         out.append(
             _diagnostic(0, ERROR, "a spec needs at least one safety conjunct", "spec/safety")
         )
     return out
+
+
+def _pair_problems(pair: Any, text: str, needle: str, label: str) -> list[dict[str, Any]]:
+    """Validate one ``[numerator, denominator]`` pair.
+
+    Checking only the *shape* was not enough, and the stress suite is what showed
+    it: ``[NaN, 1]``, ``[Infinity, 1]``, ``[[[1]], 1]`` and ``[1, 0]`` are all
+    two-element lists, so the editor reported a clean file for four specs the
+    checker refuses outright. An editor that disagrees with the gate is worse
+    than an editor with no diagnostics.
+    """
+    if not (isinstance(pair, list) and len(pair) == 2):
+        return [
+            _diagnostic(
+                _line_of(text, needle),
+                ERROR,
+                f"{label} must be [numerator, denominator]",
+                "spec/pair",
+            )
+        ]
+    numerator, denominator = pair
+    for part, what in ((numerator, "numerator"), (denominator, "denominator")):
+        if isinstance(part, bool) or not isinstance(part, int):
+            shown = "a nested list" if isinstance(part, list) else repr(part)
+            return [
+                _diagnostic(
+                    _line_of(text, needle),
+                    ERROR,
+                    f"{label}: the {what} must be a whole number, found {shown}. "
+                    "Rationals travel as exact integer pairs precisely so that no "
+                    "verdict depends on float formatting.",
+                    "spec/pair",
+                )
+            ]
+    if denominator == 0:
+        return [
+            _diagnostic(
+                _line_of(text, needle),
+                ERROR,
+                f"{label} has a zero denominator",
+                "spec/zero-denominator",
+            )
+        ]
+    return []
 
 
 def _unbounded_variables(spec: dict[str, Any]) -> set[str]:

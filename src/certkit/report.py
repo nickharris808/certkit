@@ -88,27 +88,34 @@ def sarif_result(verdict: str, location: str, message: str) -> dict[str, Any]:
     }
 
 
-def sarif_document(results: list[dict[str, Any]]) -> dict[str, Any]:
+def sarif_document(results: list[dict[str, Any]], verdict: str | None = None) -> dict[str, Any]:
     """Wrap findings in a SARIF 2.1.0 run.
 
     Only the parts GitHub actually consumes are emitted; the full schema is
     enormous and most of it would be noise.
+
+    ``verdict`` is recorded as a run property. An ACCEPTED run has no results --
+    that is what SARIF means by a clean run -- but a file that does not say which
+    verdict produced it cannot be told apart from a run that never happened. The
+    stress suite found this: "the artifact is verdict-preserving" was true for
+    the two failing verdicts and silently false for the passing one.
     """
+    run: dict[str, Any] = {
+        "tool": {
+            "driver": {
+                "name": "certkit",
+                "informationUri": "https://github.com/nickharris808/certkit",
+                "rules": SARIF_RULES,
+            }
+        },
+        "results": results,
+    }
+    if verdict is not None:
+        run["properties"] = {"certkit.verdict": verdict}
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
-        "runs": [
-            {
-                "tool": {
-                    "driver": {
-                        "name": "certkit",
-                        "informationUri": "https://github.com/nickharris808/certkit",
-                        "rules": SARIF_RULES,
-                    }
-                },
-                "results": results,
-            }
-        ],
+        "runs": [run],
     }
 
 
@@ -151,6 +158,11 @@ def _junit(report: CheckReport, name: str) -> str:
             f"message={quoteattr(_reason_of(report))}>"
             f"{escape(report.verdict)}: {escape(_reason_of(report))}</failure>\n    "
         )
+    # The verdict travels even on a pass. A JUnit file that only names the
+    # verdict when it is bad cannot be distinguished from one produced by a run
+    # that checked nothing.
+    if not body:
+        body = f"\n      <system-out>{escape(report.verdict)}</system-out>\n    "
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         f'<testsuites tests="1" failures="{failed}">\n'
@@ -173,7 +185,7 @@ def render(report: CheckReport, fmt: str = "text", *, name: str = "<unnamed>") -
             if report.ok
             else [sarif_result(report.verdict, name, f"{report.verdict}: {_reason_of(report)}")]
         )
-        return json.dumps(sarif_document(results), indent=2)
+        return json.dumps(sarif_document(results, report.verdict), indent=2)
     if fmt == "junit":
         return _junit(report, name)
     if fmt == "markdown":

@@ -210,7 +210,11 @@ def main(argv: Any = None) -> int:
         fmt = "json" if args.json else args.format
         # SARIF anchors findings at a file, so pass the spec path rather than the
         # spec's own name -- a code-scanning alert has to point somewhere real.
-        label = str(args.spec) if fmt == "sarif" else spec.get("name", "<unnamed>")
+        # `spec` is whatever was in the file, which may not be an object at all.
+        # check_certificate already refused it; reading .name here would turn a
+        # clean refusal into a traceback.
+        spec_name = spec.get("name", "<unnamed>") if isinstance(spec, dict) else "<unnamed>"
+        label = str(args.spec) if fmt == "sarif" else spec_name
         print(render(report, fmt, name=label))
         if report.verdict == UNVERIFIED:
             return 3

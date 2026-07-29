@@ -190,6 +190,17 @@ def check_certificate(
     anything about this spec. The escape hatch is for authoring workflows where
     the fingerprint has not been computed yet, not for relaxing the verdict.
     """
+    # A spec or certificate that is not a mapping at all -- None, a list, a bare
+    # string, a number -- used to raise AttributeError out of the checker. The
+    # JavaScript implementation guarded this and the Python one did not, which is
+    # exactly the kind of divergence the differential vectors exist to find; the
+    # stress suite found it first. A checker fed attacker-controlled input
+    # refuses; it does not raise.
+    if not isinstance(spec, Mapping):
+        return CheckReport(False, [], f"spec must be an object, got {type(spec).__name__}")
+    if not isinstance(cert, Mapping):
+        return CheckReport(False, [], f"certificate must be an object, got {type(cert).__name__}")
+
     if cert.get("schema") != CERT_SCHEMA:
         return CheckReport(False, [], f"unexpected certificate schema {cert.get('schema')!r}")
     if spec.get("schema") != SPEC_SCHEMA:

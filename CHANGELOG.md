@@ -3,6 +3,30 @@
 All notable changes to this package. Format follows [Keep a Changelog](https://keepachangelog.com/);
 versioning is [semantic](https://semver.org/).
 
+## [0.4.1]
+
+### Fixed
+- **`check_certificate` raised instead of refusing when the spec or certificate was not an object
+  at all** (`None`, a list, a bare string, a number). The JavaScript implementation guarded this and
+  the Python one did not — a divergence the new stress suite found before the differential vectors
+  did. Both now refuse with a reason, and the vectors cover it on every push.
+- **`certkit check` printed a traceback** on those same inputs, because the CLI read `spec["name"]`
+  after the checker had already refused the document.
+- **The language server reported a clean file for four specs the checker refuses.** It validated the
+  *shape* of a `[numerator, denominator]` pair but not its contents, so `[NaN, 1]`, `[Infinity, 1]`,
+  `[[1], 1]` and `[1, 0]` all passed. An editor that disagrees with the gate is worse than an editor
+  with no diagnostics. A `null` guard is now an error too, rather than being read as an empty
+  conjunction.
+- **SARIF and JUnit did not name the verdict on a pass.** An accepted SARIF run correctly has no
+  results, but a file that does not record which verdict produced it cannot be told apart from a run
+  that never happened. The verdict now travels as a SARIF run property and a JUnit `system-out`.
+
+### Added
+- `ARCHITECTURE.md`, `CITATION.cff`, and a documentation-parity test shared across the portfolio.
+- `tests/test_stress_new_surfaces.py` — 199 adversarial tests over the SMT-LIB bridge, the output
+  formats, the LSP (including byte-level framing at every chunk size), the notebook renderer, the
+  pre-commit hook and the schema cache.
+
 ## [0.4.0]
 
 ### Added
